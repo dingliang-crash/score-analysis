@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>成绩分析工具</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <script src="https://unpkg.com/bmob-js-sdk/dist/bmob-min.js"></script>
     <style>
         * {
             margin: 0;
@@ -384,13 +383,16 @@
 <body>
     <div class="container">
         <div id="config-warning" style="background: #fff3cd; border: 1px solid #ffc107; color: #856404; padding: 15px; border-radius: 4px; margin-bottom: 20px; display: none;">
-            <strong>⚠️ 需要配置Bmob</strong><br>
-            请按照以下步骤配置Bmob以启用数据云存储和同步：<br>
+            <strong>⚠️ 需要配置GitHub Gist</strong><br>
+            请按照以下步骤配置GitHub Gist以启用数据云存储和同步：<br>
             <ol style="margin: 10px 0 10px 20px;">
-                <li>访问 <a href="https://www.bmobapp.com/" target="_blank" style="color: #0066cc;">Bmob官网</a> 注册并登录</li>
-                <li>点击"创建应用"，输入应用名称（例如：score-analysis）</li>
-                <li>进入应用设置，复制 Application ID 和 Application Key</li>
-                <li>复制配置信息，替换代码中的 bmobConfig</li>
+                <li>访问 <a href="https://gist.github.com/" target="_blank" style="color: #0066cc;">GitHub Gist</a> 创建一个新的 Gist</li>
+                <li>输入描述（例如：成绩数据），创建一个文件 <code>score-data.json</code></li>
+                <li>文件内容输入：<code>{}</code>（空对象）</li>
+                <li>点击"Create public gist"创建</li>
+                <li>从浏览器地址栏复制 Gist ID（例如：a1b2c3d4e5f6）</li>
+                <li>（可选）如需私有Gist，在GitHub设置中创建 Personal Access Token</li>
+                <li>复制配置信息，替换代码中的 gistConfig</li>
             </ol>
             <button class="btn btn-primary" onclick="document.getElementById('config-warning').style.display='none'">我知道了</button>
         </div>
@@ -522,96 +524,157 @@
     </div>
 
     <script>
-        // Bmob配置（需要替换为你的配置）
-        const bmobConfig = {
-            applicationId: "98686468bfba74f4cf55c4f42ddb21a4",
-            applicationKey: "9975b2f1a69336ee"
+        // GitHub Gist配置（需要替换为你的配置）
+        const gistConfig = {
+            gistId: "eba77740a9acfa0d64a3bb2a5f12d6a4",  // 你的Gist ID，例如：a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6
+            filename: "score-data.json",  // 数据文件名
+            token: "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"  // GitHub Personal Access Token（可选，用于私有Gist）
         };
 
-        // 初始化Bmob
-        let useBmob = false;
+        // 初始化
+        let useGist = false;
         let userId = null;
 
-        try {
-            if (bmobConfig.applicationId !== "98686468bfba74f4cf55c4f42ddb21a4") {
-                Bmob.initialize(bmobConfig.applicationId, bmobConfig.applicationKey);
-                useBmob = true;
-                
-                // 生成或获取用户ID
-                userId = localStorage.getItem('bmob_user_id');
-                if (!userId) {
-                    userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-                    localStorage.setItem('bmob_user_id', userId);
+        // 等待页面加载完成
+        function initStorage() {
+            try {
+                if (gistConfig.gistId && gistConfig.gistId !== "") {
+                    useGist = true;
+                    
+                    // 生成或获取用户ID
+                    userId = localStorage.getItem('gist_user_id');
+                    if (!userId) {
+                        userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                        localStorage.setItem('gist_user_id', userId);
+                        console.log('生成新用户ID:', userId);
+                    }
+                    
+                    loadSubjectsFromGist();
+                } else {
+                    document.getElementById('config-warning').style.display = 'block';
+                    subjects = JSON.parse(localStorage.getItem('subjects')) || [];
+                    renderSubjects();
                 }
-                
-                loadSubjectsFromBmob();
-            } else {
-                document.getElementById('config-warning').style.display = 'block';
+            } catch (error) {
+                console.error('初始化失败:', error);
+                alert('初始化失败：' + error.message + '\n将使用本地存储模式');
                 subjects = JSON.parse(localStorage.getItem('subjects')) || [];
                 renderSubjects();
             }
-        } catch (error) {
-            console.error('Bmob初始化失败:', error);
-            subjects = JSON.parse(localStorage.getItem('subjects')) || [];
-            renderSubjects();
+        }
+
+        // 页面加载完成后初始化
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initStorage);
+        } else {
+            initStorage();
         }
 
         // 数据存储
         let subjects = [];
         let currentSubjectId = null;
 
-        // 从Bmob加载数据
-        async function loadSubjectsFromBmob() {
-            if (!useBmob || !userId) return;
+        // 从Gist加载数据
+        async function loadSubjectsFromGist() {
+            if (!useGist || !userId) return;
             
             try {
-                const query = new Bmob.Query('UserData');
-                query.equalTo('userId', userId);
-                const result = await query.find();
+                console.log('正在从Gist加载数据...');
+                const response = await fetch(`https://api.github.com/gists/${gistConfig.gistId}`);
+                const data = await response.json();
                 
-                if (result && result.length > 0) {
-                    subjects = result[0].get('subjects') || [];
-                    renderSubjects();
-                } else {
-                    // 首次使用，从localStorage迁移数据
-                    const localData = localStorage.getItem('subjects');
-                    if (localData) {
-                        subjects = JSON.parse(localData);
-                        await saveSubjectsToBmob();
+                if (data.files && data.files[gistConfig.filename]) {
+                    const content = data.files[gistConfig.filename].content;
+                    const parsedData = JSON.parse(content);
+                    
+                    // 查找当前用户的数据
+                    if (parsedData[userId]) {
+                        subjects = parsedData[userId] || [];
+                        console.log('从Gist加载数据成功，科目数量:', subjects.length);
                         renderSubjects();
+                    } else {
+                        // 首次使用，从localStorage迁移数据
+                        const localData = localStorage.getItem('subjects');
+                        if (localData) {
+                            subjects = JSON.parse(localData);
+                            await saveSubjectsToGist();
+                            renderSubjects();
+                        } else {
+                            subjects = [];
+                            renderSubjects();
+                        }
                     }
+                } else {
+                    console.error('Gist文件不存在');
+                    alert('Gist数据文件不存在，请检查配置');
                 }
             } catch (error) {
-                console.error('加载数据失败:', error);
+                console.error('从Gist加载数据失败:', error);
+                alert('从Gist加载数据失败，将使用本地存储');
+                subjects = JSON.parse(localStorage.getItem('subjects')) || [];
+                renderSubjects();
             }
         }
 
-        // 保存数据到Bmob
-        async function saveSubjectsToBmob() {
-            if (!useBmob || !userId) {
+        // 保存数据到Gist
+        async function saveSubjectsToGist() {
+            if (!useGist || !userId) {
+                localStorage.setItem('subjects', JSON.stringify(subjects));
+                return;
+            }
+            
+            if (!gistConfig.token || gistConfig.token === "") {
+                alert('⚠️ 需要配置 GitHub Personal Access Token\n\nGitHub API 更新 Gist 需要认证。\n请按照页面顶部的提示创建 Token 并配置到代码中。\n\n数据已保存到本地。');
                 localStorage.setItem('subjects', JSON.stringify(subjects));
                 return;
             }
             
             try {
-                const query = new Bmob.Query('UserData');
-                query.equalTo('userId', userId);
-                const result = await query.find();
+                console.log('正在保存数据到Gist...');
                 
-                if (result && result.length > 0) {
-                    const userData = result[0];
-                    userData.set('subjects', subjects);
-                    await userData.save();
+                // 先获取当前Gist内容
+                const response = await fetch(`https://api.github.com/gists/${gistConfig.gistId}`);
+                const data = await response.json();
+                
+                // 更新数据
+                let allData = {};
+                if (data.files && data.files[gistConfig.filename]) {
+                    const content = data.files[gistConfig.filename].content;
+                    allData = JSON.parse(content);
+                }
+                allData[userId] = subjects;
+                
+                // 更新Gist
+                const updateData = {
+                    files: {
+                        [gistConfig.filename]: {
+                            content: JSON.stringify(allData, null, 2)
+                        }
+                    }
+                };
+                
+                const headers = {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/vnd.github.v3+json',
+                    'Authorization': `token ${gistConfig.token}`
+                };
+                
+                const updateResponse = await fetch(`https://api.github.com/gists/${gistConfig.gistId}`, {
+                    method: 'PATCH',
+                    headers: headers,
+                    body: JSON.stringify(updateData)
+                });
+                
+                if (updateResponse.ok) {
+                    console.log('保存数据到Gist成功');
                 } else {
-                    const UserData = Bmob.Object.extend('UserData');
-                    const userData = new UserData();
-                    userData.set('userId', userId);
-                    userData.set('subjects', subjects);
-                    await userData.save();
+                    const errorData = await updateResponse.json();
+                    throw new Error(`HTTP ${updateResponse.status}: ${errorData.message || updateResponse.statusText}`);
                 }
             } catch (error) {
-                console.error('保存数据失败:', error);
-                alert('保存数据失败，请检查网络连接');
+                console.error('保存数据到Gist失败:', error);
+                alert('保存数据到Gist失败：' + error.message + '\n\n数据已保存到本地');
+                localStorage.setItem('subjects', JSON.stringify(subjects));
             }
         }
 
@@ -1510,7 +1573,7 @@
         }
 
         function saveSubjects() {
-            saveSubjectsToBmob();
+            saveSubjectsToGist();
         }
 
         function showSubjectError(msg) {
