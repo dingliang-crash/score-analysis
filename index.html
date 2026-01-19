@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>成绩分析工具</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://unpkg.com/bmob-js-sdk/dist/bmob-min.js"></script>
     <style>
         * {
             margin: 0;
@@ -382,6 +383,17 @@
 </head>
 <body>
     <div class="container">
+        <div id="config-warning" style="background: #fff3cd; border: 1px solid #ffc107; color: #856404; padding: 15px; border-radius: 4px; margin-bottom: 20px; display: none;">
+            <strong>⚠️ 需要配置Bmob</strong><br>
+            请按照以下步骤配置Bmob以启用数据云存储和同步：<br>
+            <ol style="margin: 10px 0 10px 20px;">
+                <li>访问 <a href="https://www.bmobapp.com/" target="_blank" style="color: #0066cc;">Bmob官网</a> 注册并登录</li>
+                <li>点击"创建应用"，输入应用名称（例如：score-analysis）</li>
+                <li>进入应用设置，复制 Application ID 和 Application Key</li>
+                <li>复制配置信息，替换代码中的 bmobConfig</li>
+            </ol>
+            <button class="btn btn-primary" onclick="document.getElementById('config-warning').style.display='none'">我知道了</button>
+        </div>
         <h1>班级成绩分析工具</h1>
 
         <!-- 添加科目 -->
@@ -510,9 +522,98 @@
     </div>
 
     <script>
+        // Bmob配置（需要替换为你的配置）
+        const bmobConfig = {
+            applicationId: "98686468bfba74f4cf55c4f42ddb21a4",
+            applicationKey: "9975b2f1a69336ee"
+        };
+
+        // 初始化Bmob
+        let useBmob = false;
+        let userId = null;
+
+        try {
+            if (bmobConfig.applicationId !== "YOUR_APPLICATION_ID") {
+                Bmob.initialize(bmobConfig.applicationId, bmobConfig.applicationKey);
+                useBmob = true;
+                
+                // 生成或获取用户ID
+                userId = localStorage.getItem('bmob_user_id');
+                if (!userId) {
+                    userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                    localStorage.setItem('bmob_user_id', userId);
+                }
+                
+                loadSubjectsFromBmob();
+            } else {
+                document.getElementById('config-warning').style.display = 'block';
+                subjects = JSON.parse(localStorage.getItem('subjects')) || [];
+                renderSubjects();
+            }
+        } catch (error) {
+            console.error('Bmob初始化失败:', error);
+            subjects = JSON.parse(localStorage.getItem('subjects')) || [];
+            renderSubjects();
+        }
+
         // 数据存储
-        let subjects = JSON.parse(localStorage.getItem('subjects')) || [];
+        let subjects = [];
         let currentSubjectId = null;
+
+        // 从Bmob加载数据
+        async function loadSubjectsFromBmob() {
+            if (!useBmob || !userId) return;
+            
+            try {
+                const query = new Bmob.Query('UserData');
+                query.equalTo('userId', userId);
+                const result = await query.find();
+                
+                if (result && result.length > 0) {
+                    subjects = result[0].get('subjects') || [];
+                    renderSubjects();
+                } else {
+                    // 首次使用，从localStorage迁移数据
+                    const localData = localStorage.getItem('subjects');
+                    if (localData) {
+                        subjects = JSON.parse(localData);
+                        await saveSubjectsToBmob();
+                        renderSubjects();
+                    }
+                }
+            } catch (error) {
+                console.error('加载数据失败:', error);
+            }
+        }
+
+        // 保存数据到Bmob
+        async function saveSubjectsToBmob() {
+            if (!useBmob || !userId) {
+                localStorage.setItem('subjects', JSON.stringify(subjects));
+                return;
+            }
+            
+            try {
+                const query = new Bmob.Query('UserData');
+                query.equalTo('userId', userId);
+                const result = await query.find();
+                
+                if (result && result.length > 0) {
+                    const userData = result[0];
+                    userData.set('subjects', subjects);
+                    await userData.save();
+                } else {
+                    const UserData = Bmob.Object.extend('UserData');
+                    const userData = new UserData();
+                    userData.set('userId', userId);
+                    userData.set('subjects', subjects);
+                    await userData.save();
+                }
+            } catch (error) {
+                console.error('保存数据失败:', error);
+                alert('保存数据失败，请检查网络连接');
+            }
+        }
 
         // 获取DOM元素
         const subjectNameInput = document.getElementById('subjectName');
@@ -1409,7 +1510,7 @@
         }
 
         function saveSubjects() {
-            localStorage.setItem('subjects', JSON.stringify(subjects));
+            saveSubjectsToBmob();
         }
 
         function showSubjectError(msg) {
