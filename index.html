@@ -396,6 +396,20 @@
             </ol>
             <button class="btn btn-primary" onclick="document.getElementById('config-warning').style.display='none'">我知道了</button>
         </div>
+
+        <!-- 同步设置 -->
+        <div id="sync-settings" style="background: #e7f3ff; border: 1px solid #409eff; color: #1f3d7a; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
+            <strong>🔄 数据同步设置</strong><br>
+            <p style="margin: 10px 0;">当前设备 ID：<code id="current-user-id" style="background: #f5f7fa; padding: 2px 8px; border-radius: 3px;">加载中...</code></p>
+            <p style="margin: 10px 0; font-size: 14px; color: #666;">
+                💡 提示：每个设备有独立的 ID。要在其他设备上同步数据，请复制上面的 ID，在其他设备上输入。
+            </p>
+            <div style="margin-top: 10px;">
+                <input type="text" id="sync-user-id" placeholder="输入其他设备的 ID 来同步数据" style="padding: 8px; border: 1px solid #dcdfe6; border-radius: 4px; width: 300px;">
+                <button class="btn btn-primary" onclick="syncFromOtherDevice()">同步数据</button>
+            </div>
+        </div>
+
         <h1>班级成绩分析工具</h1>
 
         <!-- 添加科目 -->
@@ -549,6 +563,9 @@
                         console.log('生成新用户ID:', userId);
                     }
                     
+                    // 显示当前用户ID
+                    document.getElementById('current-user-id').textContent = userId;
+                    
                     loadSubjectsFromGist();
                 } else {
                     document.getElementById('config-warning').style.display = 'block';
@@ -560,6 +577,49 @@
                 alert('初始化失败：' + error.message + '\n将使用本地存储模式');
                 subjects = JSON.parse(localStorage.getItem('subjects')) || [];
                 renderSubjects();
+            }
+        }
+
+        // 从其他设备同步数据
+        async function syncFromOtherDevice() {
+            const otherUserId = document.getElementById('sync-user-id').value.trim();
+            
+            if (!otherUserId) {
+                alert('请输入其他设备的 ID');
+                return;
+            }
+            
+            if (!confirm(`确定要从 ID "${otherUserId}" 同步数据吗？\n\n这将覆盖当前设备的数据！`)) {
+                return;
+            }
+            
+            try {
+                console.log('正在从其他设备同步数据...');
+                const response = await fetch(`https://api.github.com/gists/${gistConfig.gistId}`);
+                const data = await response.json();
+                
+                if (data.files && data.files[gistConfig.filename]) {
+                    const content = data.files[gistConfig.filename].content;
+                    const parsedData = JSON.parse(content);
+                    
+                    if (parsedData[otherUserId]) {
+                        subjects = parsedData[otherUserId] || [];
+                        userId = otherUserId;
+                        localStorage.setItem('gist_user_id', userId);
+                        document.getElementById('current-user-id').textContent = userId;
+                        
+                        await saveSubjectsToGist();
+                        renderSubjects();
+                        alert('同步成功！');
+                    } else {
+                        alert('未找到该 ID 的数据');
+                    }
+                } else {
+                    alert('Gist数据文件不存在');
+                }
+            } catch (error) {
+                console.error('同步失败:', error);
+                alert('同步失败：' + error.message);
             }
         }
 
