@@ -213,6 +213,30 @@
             background: #dcdfe6;
             color: #606266;
         }
+        .teacher-review {
+            background: #f8f9fb;
+            border-left: 4px solid #667eea;
+            padding: 14px 18px;
+            border-radius: 6px;
+            margin-top: 12px;
+        }
+        .teacher-review p {
+            margin: 10px 0;
+            line-height: 1.8;
+        }
+        .advice-list {
+            margin: 8px 0;
+            padding-left: 24px;
+        }
+        .advice-list li {
+            margin: 8px 0;
+            line-height: 1.8;
+        }
+        .review-note {
+            color: #909399;
+            font-size: 12px;
+            margin-top: 12px;
+        }
         .btn {
             padding: 8px 16px;
             border: none;
@@ -1299,19 +1323,30 @@
             const z = stdDev > 0 ? (childScore - avg) / stdDev : null;
             const gapAvg = (childScore - avg).toFixed(2);
 
-            // 纵向：最近一次更早的考试（按日期），用于个人纵向对比
-            const prevExam = subject.exams
-                .filter(e => e.id !== exam.id && new Date(e.date) < new Date(exam.date))
-                .sort((a, b) => new Date(b.date) - new Date(a.date))[0] || null;
-            const prevRate = prevExam ? scoreRate(prevExam.childScore, prevExam.fullScore) : null;
-
             // 中考目标
             const targetRate = zk && zk.targetScore > 0 && zk.fullScore > 0 ? scoreRate(zk.targetScore, zk.fullScore) : null;
 
             const qualityText = generateQualityDescription(difficultyVal, discriminationVal);
-            const personalText = generatePersonalAnalysis({
-                childRate, childGrade, pr, z, prevRate,
-                prevName: prevExam ? prevExam.name : null, targetRate
+
+            // 教师点评所需：历史得分率序列（升序）→ 近5次波动 σ 与全程趋势斜率
+            const histRates = [...subject.exams]
+                .sort((a, b) => new Date(a.date) - new Date(b.date))
+                .map(e => scoreRate(e.childScore, e.fullScore));
+            const recentRates = histRates.slice(-5);
+            let sigma = null;
+            if (recentRates.length >= 3) {
+                const mean = recentRates.reduce((a, b) => a + b, 0) / recentRates.length;
+                sigma = Math.sqrt(recentRates.reduce((s, r) => s + (r - mean) ** 2, 0) / recentRates.length);
+            }
+            const slope = histRates.length >= 3 ? calculateTrend(histRates) : null;
+
+            const teacherReview = generateTeacherReview({
+                subjectName: subject.name,
+                rate: childRate, pr,
+                classAvgRate: scoreRate(avg, fullScore),
+                sigma, slope,
+                examCount: subject.exams.length,
+                targetRate
             });
 
             let targetSection = '';
@@ -1392,8 +1427,8 @@
                             <div class="stat-item"><strong>标准分Z：</strong>${z !== null ? (z > 0 ? '+' + z.toFixed(2) : z.toFixed(2)) : '—'}</div>
                             <div class="stat-item"><strong>与均分差：</strong>${gapAvg > 0 ? '+' + gapAvg : gapAvg}</div>
                         </div>
-                        ${personalText}
-                        ${targetRate === null ? `<p style="color:#909399;font-size:12px;">💡 提示：在科目卡片点「🎯 目标」设置中考满分与目标分后，这里将显示目标达成对比。</p>` : ''}
+                        ${teacherReview}
+                        ${targetRate === null ? `<p style="color:#909399;font-size:12px;">💡 提示：在科目卡片点「🎯 目标」设置中考目标分数后，这里将增加目标可达性分析。</p>` : ''}
                     </div>
                 </div>
             `;
@@ -1855,46 +1890,174 @@
             return desc;
         }
 
-        function generatePersonalAnalysis(ctx) {
-            let desc = '<p><strong>综合评价：</strong></p>';
+        // ============ 教师视角点评引擎 ============
+        // 模拟有经验教师的判读路径：档次定位 → 试卷难度语境 → 稳定性诊断
+        // → 按江苏中考 7:2:1 结构推断丢分层次 → 学科化提升建议 → 目标可达性
 
-            const rateText = ctx.childRate.toFixed(1);
-            desc += `<p>本次得分率 ${rateText}%，按江苏等级线（优秀≥85%、良好≥70%、合格≥60%）评定为「${ctx.childGrade.label}」。`;
+        function determineTier(rate) {
+            if (rate >= 90) return '尖子（冲满分档）';
+            if (rate >= 85) return '优秀';
+            if (rate >= 75) return '中上';
+            if (rate >= 60) return '中等';
+            return '待提高';
+        }
 
-            if (ctx.pr !== null) {
-                let posDesc;
-                if (ctx.pr >= 85) posDesc = '位于班级前列';
-                else if (ctx.pr >= 60) posDesc = '处于班级中上水平';
-                else if (ctx.pr >= 40) posDesc = '处于班级中游';
-                else posDesc = '处于班级中下游，提升空间较大';
-                desc += `百分等级 PR=${ctx.pr.toFixed(1)}%，即超过全班约 ${ctx.pr.toFixed(0)}% 的同学，${posDesc}。`;
+        function getWeaknessProfile(rate) {
+            // 江苏中考及校内考试普遍为 7:2:1（基础:中档:难题）结构，按得分率推断丢分层次
+            if (rate < 60) return {
+                level: '基础',
+                text: '基础题存在明显失分——按7:2:1的试卷结构，得分率低于60%说明相当一部分基础题没有拿住，核心概念和基本题型还没有过关'
+            };
+            if (rate < 75) return {
+                level: '中档',
+                text: '基础题基本拿住，失分集中在中等难度题——这一档提分最快，丢分多源于概念理解不透、题型见得不够，属于"会一点但不熟"'
+            };
+            if (rate < 85) return {
+                level: '较难',
+                text: '基础和中档题已基本稳定，失分主要集中在较难的综合题、压轴题——这一阶段拼的是题型熟练度与综合运用能力'
+            };
+            return {
+                level: '压轴细节',
+                text: '整体掌握扎实，失分主要在压轴题最后一问或过程细节（审题、计算、表述规范）——从85%到95%靠的不是多刷题，而是稳定性和细节'
+            };
+        }
+
+        function getSubjectAdvice(subjectName) {
+            const lib = [
+                { keys: ['数学'], tips: {
+                    基础: '数学：每天限时20分钟做一组基础题（课本例题+课后习题），目标是基础题零失误，先把该拿的分全部拿稳，再碰综合题',
+                    中档: '数学：错题按「计算失误 / 概念不清 / 思路缺失」三类归因，每周重做一遍上周错题，同一类错误争取不犯第二次',
+                    较难: '数学：每周精练2~3道综合题（函数与几何为主），做完对照标准答案研究步骤逻辑，重点学"这一步是怎么想到的"',
+                    压轴细节: '数学：压轴题限时训练（单题15分钟内），养成写完回代检验的习惯，减少"会而不对"的丢分' } },
+                { keys: ['语文', '中文'], tips: {
+                    基础: '语文：古诗文默写、字词成语属于"保底分"，每天10分钟滚动过关，这部分不允许丢分',
+                    中档: '语文：阅读理解按题型（概括/赏析/作用/主旨）整理答题框架，作答要点化、术语化，避免"有感而发"式答案',
+                    较难: '语文：作文每两周一篇并请老师精改一次，同时积累5~8个可跨题目迁移的写作素材',
+                    压轴细节: '语文：高分作文拼立意与结构——审题先圈关键词、列提纲再动笔，确保不跑题、首尾呼应' } },
+                { keys: ['英语', '外语'], tips: {
+                    基础: '英语：词汇是根——按单元滚动听写、考纲词汇分批过关；语法薄弱点用专题小卷逐个击破',
+                    中档: '英语：每周3篇阅读限时训练（每篇7~8分钟），先看题再读文，训练定位关键句的能力',
+                    较难: '英语：完形与首字母填空做完先通读检查逻辑连贯性，固定搭配记到积累本上滚动复习',
+                    压轴细节: '英语：背3~5个高级句型并确保用对；南京中考含听力口语（30分），每天15分钟听说训练不能停' } },
+                { keys: ['物理'], tips: {
+                    基础: '物理：易混概念做对比表（如压力/压强、串联/并联），概念题丢分多是理解不透而非记不住',
+                    中档: '物理：实验题按「原理—步骤—现象—结论—误差分析」五要素规范表述，表述题是按点给分的',
+                    较难: '物理：综合计算先画受力图/电路图再列式，写清公式与单位——步骤分往往比答案分更高',
+                    压轴细节: '物理：压轴题拆成2~3个小问题逐问拿下，能拿的分先拿，最后一问量力而行' } },
+                { keys: ['历史', '道德与法治', '道法', '政治'], tips: {
+                    基础: '文科：构建时间线/知识框架图，答题前先在脑中定位"这是哪一课哪个考点"再组织答案',
+                    中档: '文科：材料题"要点化+术语化"——先提炼材料关键信息，再结合课本术语分点作答，切忌整段照抄材料',
+                    较难: '文科：综合题按"是什么—为什么—怎么样"组织层次，每点控制在1~2句话，观点明确',
+                    压轴细节: '文科：小论文/评论题先亮观点、分层论证、结尾回扣观点，卷面分点清晰' } },
+                { keys: ['地理', '生物'], tips: {
+                    基础: '地生（会考导向）：按专题图文结合记忆，多用地图、结构图复盘，纯背文字效率低',
+                    中档: '地生（会考导向）：会考题型相对固定，刷近两年会考真题性价比最高',
+                    较难: '地生（会考导向）：按专题查漏（如地理的时区/等高线、生物的遗传/循环系统），专题突破后再做综合套卷',
+                    压轴细节: '地生（会考导向）：用规范术语作答，避免口语化表述丢分' } }
+            ];
+            for (const item of lib) {
+                if (item.keys.some(k => subjectName.includes(k))) return item.tips;
             }
-            desc += '</p>';
+            return {
+                基础: '回归课本与课堂笔记，先把核心概念、基本题型吃透，再做提高题',
+                中档: '建立错题本并按知识点归类，每周重做一遍，把"会而不熟"变成"熟练"',
+                较难: '对综合题做专题训练，做完务必复盘标准答案的思路过程',
+                压轴细节: '限时训练+规范表述，减少非知识性失分'
+            };
+        }
 
-            if (ctx.z !== null && !isNaN(ctx.z)) {
-                const zText = ctx.z > 0 ? '+' + ctx.z.toFixed(2) : ctx.z.toFixed(2);
-                let zDesc;
-                if (ctx.z >= 1) zDesc = '明显高于班级平均，且优势稳定（超均分1个标准差以上）';
-                else if (ctx.z > 0) zDesc = '高于班级平均水平';
-                else if (ctx.z > -1) zDesc = '略低于班级平均水平，差距不大';
-                else zDesc = '明显低于班级平均（低均分1个标准差以上），需要重点关注';
-                desc += `<p><strong>标准分（Z分）：</strong>${zText}，${zDesc}。Z分消除了试卷难易影响，反映孩子在班级中的真实相对位置。</p>`;
+        function generateTeacherReview(c) {
+            const tier = determineTier(c.rate);
+            const weakness = getWeaknessProfile(c.rate);
+            const tips = getSubjectAdvice(c.subjectName);
+            let html = '<div class="teacher-review">';
+
+            // ① 档次定位 + 试卷难度语境
+            let posText = '';
+            if (c.pr !== null) {
+                if (c.pr >= 80) posText = `在班级位于第一梯队（超过全班 ${c.pr.toFixed(0)}% 的同学）`;
+                else if (c.pr >= 60) posText = '在班级处于中上位置';
+                else if (c.pr >= 40) posText = '在班级处于中游';
+                else posText = '在班级处于中下游';
+            }
+            let classCtx;
+            if (c.classAvgRate >= 80) {
+                classCtx = `本次班级平均得分率高达 ${c.classAvgRate.toFixed(0)}%，试卷偏易或班级整体较强，高分要"打折"看，不宜盲目乐观`;
+            } else if (c.classAvgRate < 62) {
+                classCtx = `本次班级平均得分率仅 ${c.classAvgRate.toFixed(0)}%，试卷明显偏难，${c.rate >= c.classAvgRate + 8 ? '你的分数含金量高于表面分数，重点看班级相对位次' : '低分更多反映试卷难度，先对照班级位置再做判断'}`;
+            } else {
+                classCtx = `本次班级平均得分率 ${c.classAvgRate.toFixed(0)}%，难度正常，分数基本反映真实水平`;
+            }
+            html += `<p><strong>① 档次定位：</strong>得分率 ${c.rate.toFixed(1)}%，对照中考绝对标准属于「${tier}」档，${posText}。${classCtx}。</p>`;
+
+            // 班级位次与中考标准的背离提醒
+            if (c.pr !== null && c.pr >= 80 && c.rate < 75) {
+                html += `<p>⚠️ 在班里排名靠前，但对照中考绝对标准仍是中上水平——班级内部位次好 ≠ 中考分数够，两条线要分开看，按中考标准继续补强。</p>`;
+            } else if (c.pr !== null && c.pr < 40 && c.rate >= 75) {
+                html += `<p>⚠️ 得分率不低，但班里多数同学更高——大概率试卷偏易或当前在班级中档偏后，需按中考标准检验真实水平。</p>`;
             }
 
-            if (ctx.prevRate !== null) {
-                const d = ctx.childRate - ctx.prevRate;
-                const dir = d > 0.5 ? '提高' : (d < -0.5 ? '下降' : '基本持平');
-                desc += `<p><strong>纵向对比：</strong>与上一次考试「${ctx.prevName}」（得分率 ${ctx.prevRate.toFixed(1)}%）相比，得分率${dir} ${Math.abs(d).toFixed(1)} 个百分点（不同考试满分和难度不同，统一按得分率比较才准确）。</p>`;
+            // ② 稳定性与趋势
+            if (c.sigma === null) {
+                html += `<p><strong>② 稳定性：</strong>该科目已记录 ${c.examCount} 次考试，样本还少，再积累2~3次后即可判断成绩稳定性与趋势。</p>`;
+            } else {
+                let stab;
+                if (c.sigma < 4) stab = '相当稳定';
+                else if (c.sigma < 8) stab = '有一定波动';
+                else stab = '波动较大';
+                let stabAdvice = '';
+                if (c.sigma >= 8) stabAdvice = c.rate >= 85
+                    ? '这个层次还大幅波动，多半不是不会，而是"会而不对"——先解决审题习惯与检查流程，再攻难题。'
+                    : '波动大通常说明不同章节掌握不均衡：翻出近几次试卷按章节统计丢分，先补丢分最集中的两块。';
+                else if (c.sigma >= 4) stabAdvice = '建议每次考后做失分归因（知识不会 / 审题失误 / 计算失误 / 时间不够），连续记录几次就能看出主要丢分模式。';
+                let trendText = '';
+                if (c.slope !== null) {
+                    if (c.slope > 0.5) trendText = `整体呈上升趋势（约 +${c.slope.toFixed(1)} 个百分点/次），势头不错，保持当前节奏。`;
+                    else if (c.slope < -0.5) trendText = `整体呈下降趋势（约 ${c.slope.toFixed(1)} 个百分点/次），建议尽快与任课老师沟通，排查近期学习状态或知识断点。`;
+                    else trendText = '整体走势平稳。';
+                }
+                html += `<p><strong>② 稳定性与趋势：</strong>近几次得分率${stab}（波动幅度约 ±${c.sigma.toFixed(1)} 个百分点）。${trendText}${stabAdvice}</p>`;
             }
 
-            if (ctx.targetRate !== null) {
-                const d = ctx.childRate - ctx.targetRate;
-                desc += `<p><strong>目标达成：</strong>${d >= 0
-                    ? `本次已达到中考目标线（目标得分率 ${ctx.targetRate.toFixed(1)}%）。`
-                    : `距中考目标线（目标得分率 ${ctx.targetRate.toFixed(1)}%）还差 ${Math.abs(d).toFixed(1)} 个百分点。`}</p>`;
+            // ③ 薄弱点判断
+            html += `<p><strong>③ 薄弱点判断：</strong>${weakness.text}。</p>`;
+
+            // ④ 提升建议
+            const tip1 = tips[weakness.level];
+            let tip2 = '';
+            if (c.sigma !== null && c.sigma >= 8) {
+                tip2 = '建立"非知识性失分记录"：每次考后统计因审题、计算、抄写丢的分，两周回看一次，把这类失分降到0是最便宜的提分。';
+            } else if (c.rate >= 85) {
+                tip2 = tips['压轴细节'];
+            } else if (c.rate < 60) {
+                tip2 = tips['中档'];
+            }
+            // 第二条建议与第一条重复时，换用相邻层次的建议
+            if (tip2 === tip1) {
+                tip2 = weakness.level === '压轴细节' ? tips['较难'] : (tips['较难'] !== tip1 ? tips['较难'] : '');
+            }
+            html += `<p><strong>④ 提升建议：</strong></p><ol class="advice-list"><li>${tip1}</li>${tip2 ? `<li>${tip2}</li>` : ''}</ol>`;
+
+            // ⑤ 目标可达性
+            if (c.targetRate !== null) {
+                const gap = c.targetRate - c.rate;
+                if (gap <= 0) {
+                    html += `<p><strong>⑤ 目标达成：</strong>本次已达到目标线（目标得分率 ${c.targetRate.toFixed(1)}%），当前「${tier}」档次足以支撑目标，重点是保持稳定性。</p>`;
+                } else if (c.slope !== null && c.slope > 0.5) {
+                    const times = Math.ceil(gap / c.slope);
+                    html += `<p><strong>⑤ 目标差距：</strong>距目标得分率还差 ${gap.toFixed(1)} 个百分点；按当前进步速度（+${c.slope.toFixed(1)}pp/次）约 ${times} 次考试后可达标——方向对了，贵在坚持。</p>`;
+                } else if (gap < 5) {
+                    html += `<p><strong>⑤ 目标差距：</strong>距目标得分率仅差 ${gap.toFixed(1)} 个百分点，属于"够一够"的范围，重点抓中档题熟练度和细节失误。</p>`;
+                } else if (gap < 15) {
+                    html += `<p><strong>⑤ 目标差距：</strong>距目标得分率还差 ${gap.toFixed(1)} 个百分点，需要针对性突破——结合上面判断的薄弱点集中攻坚，而不是平均用力。</p>`;
+                } else {
+                    html += `<p><strong>⑤ 目标差距：</strong>距目标得分率还差 ${gap.toFixed(1)} 个百分点，差距较大，需要系统性提升：建议与任课老师面谈一次，摸清知识断点、重排学习优先级，必要时考虑针对性辅导。</p>`;
+                }
             }
 
-            return desc;
+            html += `<p class="review-note">* 点评按江苏中考7:2:1难度结构与等级评价口径自动生成，供家长参考；薄弱点的精确判断还需结合卷面失分明细与任课老师的课堂观察。</p>`;
+            html += '</div>';
+            return html;
         }
 
         function scrollToBottom(element) {
