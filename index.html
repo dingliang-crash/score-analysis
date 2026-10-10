@@ -4,12 +4,21 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>班级成绩分析工具</title>
-    <script type="module" crossorigin src="./assets/index-utQw7PCr.js"></script>
-    <link rel="modulepreload" crossorigin href="./assets/antd-BEvXKV81.js">
-    <link rel="modulepreload" crossorigin href="./assets/echarts-CiM7fDt5.js">
-    <link rel="stylesheet" crossorigin href="./assets/index-DbUNpehZ.css">
+    <!-- 大依赖走 bootcdn（国内访问快），github.io 只承载轻量应用代码 -->
+    <script src="https://cdn.bootcdn.net/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/dayjs/1.11.10/dayjs.min.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/dayjs/1.11.10/locale/zh-cn.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/antd/5.16.5/antd.min.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/echarts/5.5.0/echarts.min.js"></script>
+    <script type="module" crossorigin src="./assets/index-C7f8ckbx.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-Dg3JiOJK.css">
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div style="display:flex;justify-content:center;align-items:center;height:100vh;color:#8a93a6;font-size:14px;">
+        正在加载，请稍候…
+      </div>
+    </div>
   </body>
 </html>
