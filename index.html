@@ -677,11 +677,6 @@
                 <input type="number" id="targetScore" placeholder="例如：102" min="0">
                 <small style="color: #909399; display: block; margin-top: 4px;">可参考目标高中近年录取线中该科目的要求；留空并保存即可清除目标。</small>
             </div>
-            <div class="form-group">
-                <label for="targetRefRate">地区参考得分率（可选，%）：</label>
-                <input type="number" id="targetRefRate" placeholder="例如：65" min="0" max="100">
-                <small style="color: #909399; display: block; margin-top: 4px;">填写区/市质量监测公布的平均得分率，用于对比孩子与地区平均水平（如 65 表示区平均得分率65%）。</small>
-            </div>
             <div style="display: flex; gap: 10px; margin-top: 20px;">
                 <button class="btn btn-primary" id="saveTargetBtn">保存</button>
                 <button class="btn btn-secondary" id="cancelTargetBtn">取消</button>
@@ -1226,7 +1221,6 @@
             document.getElementById('targetFullScoreDisplay').innerHTML =
                 `${zf.score} 分${zf.matched ? '' : ' <span style="color:#e6a23c;font-size:13px;">（未识别科目，暂按满分100处理；地理、生物为等级考查不计分）</span>'}`;
             document.getElementById('targetScore').value = zk.targetScore || '';
-            document.getElementById('targetRefRate').value = zk.referenceRate || '';
             document.getElementById('targetError').textContent = '';
             document.getElementById('targetModal').style.display = 'block';
         }
@@ -1237,13 +1231,11 @@
             errorEl.textContent = '';
 
             const targetScoreInput = document.getElementById('targetScore').value.trim();
-            const refRateInput = document.getElementById('targetRefRate').value.trim();
             const fullScore = getZhongkaoFullScore(subject.name).score;
             const targetScore = targetScoreInput === '' ? null : parseFloat(targetScoreInput);
-            const refRate = refRateInput === '' ? null : parseFloat(refRateInput);
 
-            // 全部留空 = 清除目标
-            if (targetScore === null && refRate === null) {
+            // 留空 = 清除目标
+            if (targetScore === null) {
                 delete subject.zhongkao;
                 saveSubjects();
                 renderSubjects();
@@ -1251,20 +1243,12 @@
                 return;
             }
 
-            if (targetScore !== null) {
-                if (isNaN(targetScore) || targetScore < 0 || targetScore > fullScore) {
-                    errorEl.textContent = `目标分数须在 0 到 ${fullScore}（该科目中考满分）之间`;
-                    return;
-                }
-            }
-            if (refRate !== null && (isNaN(refRate) || refRate < 0 || refRate > 100)) {
-                errorEl.textContent = '地区参考得分率须在 0~100 之间';
+            if (isNaN(targetScore) || targetScore < 0 || targetScore > fullScore) {
+                errorEl.textContent = `目标分数须在 0 到 ${fullScore}（该科目中考满分）之间`;
                 return;
             }
 
-            subject.zhongkao = { fullScore: fullScore };
-            if (targetScore !== null) subject.zhongkao.targetScore = targetScore;
-            if (refRate !== null) subject.zhongkao.referenceRate = refRate;
+            subject.zhongkao = { fullScore: fullScore, targetScore: targetScore };
 
             saveSubjects();
             renderSubjects();
@@ -1321,9 +1305,8 @@
                 .sort((a, b) => new Date(b.date) - new Date(a.date))[0] || null;
             const prevRate = prevExam ? scoreRate(prevExam.childScore, prevExam.fullScore) : null;
 
-            // 目标与地区参考
+            // 中考目标
             const targetRate = zk && zk.targetScore > 0 && zk.fullScore > 0 ? scoreRate(zk.targetScore, zk.fullScore) : null;
-            const refRate = zk && zk.referenceRate > 0 ? zk.referenceRate : null;
 
             const qualityText = generateQualityDescription(difficultyVal, discriminationVal);
             const personalText = generatePersonalAnalysis({
@@ -1346,20 +1329,6 @@
                     <p style="color:#909399;font-size:13px;margin-top:8px;">${diffRate >= 0
                         ? `本次已达到目标线，按中考满分${zk.fullScore}分折算约超出目标 ${diffZhongkao.toFixed(1)} 分。`
                         : `按中考满分${zk.fullScore}分折算，距离目标还差约 ${Math.abs(diffZhongkao).toFixed(1)} 分（得分率需再提高 ${Math.abs(diffRate).toFixed(1)} 个百分点）。`}</p>
-                </div>`;
-            }
-
-            let refSection = '';
-            if (refRate !== null) {
-                const d = childRate - refRate;
-                refSection = `
-                <div class="result-section">
-                    <h3>📍 地区水平对比</h3>
-                    <div class="stats-row">
-                        <div class="stat-item"><strong>本次得分率：</strong>${childRate.toFixed(1)}%</div>
-                        <div class="stat-item"><strong>参考得分率：</strong>${refRate}%</div>
-                        <div class="stat-item"><strong>对比：</strong><span style="color:${d >= 0 ? '#67c23a' : '#f56c6c'};font-weight:bold;">${d >= 0 ? '高于参考 ' : '低于参考 '}${Math.abs(d).toFixed(1)} 个百分点</span></div>
-                    </div>
                 </div>`;
             }
 
@@ -1410,7 +1379,6 @@
                 </div>
 
                 ${targetSection}
-                ${refSection}
 
                 <div class="result-section">
                     <h3>个人成绩分析</h3>
