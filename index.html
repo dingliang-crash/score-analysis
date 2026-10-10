@@ -192,6 +192,27 @@
             color: #f56c6c;
             font-weight: bold;
         }
+        .modal-close {
+            position: absolute;
+            top: 14px;
+            right: 16px;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            border: none;
+            background: #f0f0f0;
+            color: #909399;
+            font-size: 20px;
+            line-height: 32px;
+            text-align: center;
+            cursor: pointer;
+            padding: 0;
+            user-select: none;
+        }
+        .modal-close:hover {
+            background: #dcdfe6;
+            color: #606266;
+        }
         .btn {
             padding: 8px 16px;
             border: none;
@@ -518,6 +539,7 @@
     <div id="subjectModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000;">
         <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 30px; border-radius: 8px; max-width: 400px; width: 90%; max-height: 90vh; overflow-y: auto;" class="modal-content">
             <h2>添加科目</h2>
+            <button class="modal-close" onclick="document.getElementById('subjectModal').style.display='none'" title="关闭">×</button>
             <div class="form-group">
                 <label for="subjectName">科目名称：</label>
                 <input type="text" id="subjectName" placeholder="例如：数学、语文、英语">
@@ -534,6 +556,7 @@
     <div id="examModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000;">
         <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 30px; border-radius: 8px; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto;" class="modal-content">
             <h2>添加考试成绩</h2>
+            <button class="modal-close" onclick="document.getElementById('examModal').style.display='none'" title="关闭">×</button>
             <div class="form-group">
                 <label for="examName">考试名称：</label>
                 <input type="text" id="examName" placeholder="例如：期中考试、期末考试">
@@ -576,10 +599,10 @@
     <div id="analysisModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000;">
         <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 30px; border-radius: 8px; max-width: 900px; width: 95%; max-height: 90vh; overflow-y: auto;" class="modal-content">
             <h2>考试分析结果</h2>
+            <button class="modal-close" onclick="document.getElementById('analysisModal').style.display='none'" title="关闭">×</button>
             <div class="result" id="analysisResult">
                 <!-- 分析结果将通过JavaScript动态生成 -->
             </div>
-            <button class="btn btn-secondary" id="closeAnalysisBtn" style="margin-top: 20px;">关闭</button>
         </div>
     </div>
 
@@ -587,6 +610,7 @@
     <div id="editExamModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000;">
         <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 30px; border-radius: 8px; max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto;" class="modal-content">
             <h2>编辑考试成绩</h2>
+            <button class="modal-close" onclick="document.getElementById('editExamModal').style.display='none'" title="关闭">×</button>
             <input type="hidden" id="editSubjectId">
             <input type="hidden" id="editExamId">
             <div class="form-group">
@@ -631,10 +655,10 @@
     <div id="trendModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000;">
         <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 30px; border-radius: 8px; max-width: 1200px; width: 95%; max-height: 90vh; overflow-y: auto;" class="modal-content">
             <h2 id="trendModalTitle">趋势分析</h2>
+            <button class="modal-close" onclick="document.getElementById('trendModal').style.display='none'" title="关闭">×</button>
             <div id="trendResult">
                 <!-- 趋势分析结果将通过JavaScript动态生成 -->
             </div>
-            <button class="btn btn-secondary" id="closeTrendBtn" style="margin-top: 20px;">关闭</button>
         </div>
     </div>
 
@@ -642,13 +666,14 @@
     <div id="targetModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000;">
         <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 30px; border-radius: 8px; max-width: 480px; width: 90%; max-height: 90vh; overflow-y: auto;" class="modal-content">
             <h2 id="targetModalTitle">🎯 设置中考目标</h2>
+            <button class="modal-close" onclick="document.getElementById('targetModal').style.display='none'" title="关闭">×</button>
             <div class="form-group">
-                <label for="targetFullScore">该科目中考满分：</label>
-                <input type="number" id="targetFullScore" placeholder="例如：120" min="1">
-                <small style="color: #909399; display: block; margin-top: 4px;">南京中考满分参考：语文/数学/英语 120、物理 100、化学 80、道德与法治/历史 60、体育 40（总分700）；地理、生物为等级考查。</small>
+                <label>中考满分（按科目自动识别）：</label>
+                <div id="targetFullScoreDisplay" style="font-size: 20px; font-weight: bold; color: #409eff; padding: 6px 0;">—</div>
+                <small style="color: #909399; display: block; margin-top: 4px;">南京中考计分科目满分：语文/数学/英语 120、物理 100、化学 80、道德与法治/历史 60、体育 40（总分700），按科目名称自动识别，无需填写；地理、生物为等级考查不计分。</small>
             </div>
             <div class="form-group">
-                <label for="targetScore">目标分数：</label>
+                <label for="targetScore">中考目标分数：</label>
                 <input type="number" id="targetScore" placeholder="例如：102" min="0">
                 <small style="color: #909399; display: block; margin-top: 4px;">可参考目标高中近年录取线中该科目的要求；留空并保存即可清除目标。</small>
             </div>
@@ -829,11 +854,9 @@
         const cancelExamBtn = document.getElementById('cancelExamBtn');
         const updateExamBtn = document.getElementById('updateExamBtn');
         const cancelEditExamBtn = document.getElementById('cancelEditExamBtn');
-        const closeTrendBtn = document.getElementById('closeTrendBtn');
         const examError = document.getElementById('examError');
         const editExamError = document.getElementById('editExamError');
         const analysisResult = document.getElementById('analysisResult');
-        const closeAnalysisBtn = document.getElementById('closeAnalysisBtn');
 
         // 打开添加科目模态框
         addSubjectBtn.addEventListener('click', function() {
@@ -995,16 +1018,8 @@
             examModal.style.display = 'none';
         });
 
-        closeAnalysisBtn.addEventListener('click', function() {
-            analysisModal.style.display = 'none';
-        });
-
         cancelEditExamBtn.addEventListener('click', function() {
             editExamModal.style.display = 'none';
-        });
-
-        closeTrendBtn.addEventListener('click', function() {
-            trendModal.style.display = 'none';
         });
 
         document.getElementById('saveTargetBtn').addEventListener('click', saveTarget);
@@ -1182,12 +1197,34 @@
         // 中考目标设置
         let currentTargetSubjectId = null;
 
+        // 南京中考计分科目满分固定，按科目名称自动识别
+        function getZhongkaoFullScore(subjectName) {
+            const map = [
+                { keys: ['道德与法治', '道法', '政治'], score: 60 },
+                { keys: ['语文', '中文'], score: 120 },
+                { keys: ['数学'], score: 120 },
+                { keys: ['英语', '外语'], score: 120 },
+                { keys: ['物理'], score: 100 },
+                { keys: ['化学'], score: 80 },
+                { keys: ['历史'], score: 60 },
+                { keys: ['体育'], score: 40 }
+            ];
+            for (const m of map) {
+                if (m.keys.some(k => subjectName.includes(k))) {
+                    return { score: m.score, matched: true };
+                }
+            }
+            return { score: 100, matched: false };
+        }
+
         function openTargetModal(subjectId) {
             currentTargetSubjectId = subjectId;
             const subject = subjects.find(s => s.id === subjectId);
             document.getElementById('targetModalTitle').textContent = `🎯 设置「${subject.name}」中考目标`;
             const zk = subject.zhongkao || {};
-            document.getElementById('targetFullScore').value = zk.fullScore || '';
+            const zf = getZhongkaoFullScore(subject.name);
+            document.getElementById('targetFullScoreDisplay').innerHTML =
+                `${zf.score} 分${zf.matched ? '' : ' <span style="color:#e6a23c;font-size:13px;">（未识别科目，暂按满分100处理；地理、生物为等级考查不计分）</span>'}`;
             document.getElementById('targetScore').value = zk.targetScore || '';
             document.getElementById('targetRefRate').value = zk.referenceRate || '';
             document.getElementById('targetError').textContent = '';
@@ -1199,10 +1236,9 @@
             const errorEl = document.getElementById('targetError');
             errorEl.textContent = '';
 
-            const fullScoreInput = document.getElementById('targetFullScore').value.trim();
             const targetScoreInput = document.getElementById('targetScore').value.trim();
             const refRateInput = document.getElementById('targetRefRate').value.trim();
-            const fullScore = fullScoreInput === '' ? null : parseFloat(fullScoreInput);
+            const fullScore = getZhongkaoFullScore(subject.name).score;
             const targetScore = targetScoreInput === '' ? null : parseFloat(targetScoreInput);
             const refRate = refRateInput === '' ? null : parseFloat(refRateInput);
 
@@ -1216,12 +1252,8 @@
             }
 
             if (targetScore !== null) {
-                if (fullScore === null || isNaN(fullScore) || fullScore <= 0) {
-                    errorEl.textContent = '请填写有效的中考满分';
-                    return;
-                }
                 if (isNaN(targetScore) || targetScore < 0 || targetScore > fullScore) {
-                    errorEl.textContent = '目标分数须在 0 到中考满分之间';
+                    errorEl.textContent = `目标分数须在 0 到 ${fullScore}（该科目中考满分）之间`;
                     return;
                 }
             }
@@ -1230,8 +1262,7 @@
                 return;
             }
 
-            subject.zhongkao = {};
-            if (fullScore !== null) subject.zhongkao.fullScore = fullScore;
+            subject.zhongkao = { fullScore: fullScore };
             if (targetScore !== null) subject.zhongkao.targetScore = targetScore;
             if (refRate !== null) subject.zhongkao.referenceRate = refRate;
 
