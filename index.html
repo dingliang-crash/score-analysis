@@ -1334,7 +1334,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            ${sortedExams.map(exam => `
+                            ${[...sortedExams].reverse().map(exam => `
                                 <tr>
                                     <td style="padding: 10px; border: 1px solid #e0e0e0;">${exam.name}</td>
                                     <td style="padding: 10px; border: 1px solid #e0e0e0;">${exam.date}</td>
