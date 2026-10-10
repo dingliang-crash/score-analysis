@@ -172,6 +172,26 @@
             background: #f5f7fa;
             color: #909399;
         }
+        .stat-badge.target-badge {
+            background: #fdf6ec;
+            color: #e6a23c;
+        }
+        .grade-excellent {
+            color: #67c23a;
+            font-weight: bold;
+        }
+        .grade-good {
+            color: #409eff;
+            font-weight: bold;
+        }
+        .grade-pass {
+            color: #e6a23c;
+            font-weight: bold;
+        }
+        .grade-fail {
+            color: #f56c6c;
+            font-weight: bold;
+        }
         .btn {
             padding: 8px 16px;
             border: none;
@@ -618,6 +638,33 @@
         </div>
     </div>
 
+    <!-- 中考目标设置模态框 -->
+    <div id="targetModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000;">
+        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 30px; border-radius: 8px; max-width: 480px; width: 90%; max-height: 90vh; overflow-y: auto;" class="modal-content">
+            <h2 id="targetModalTitle">🎯 设置中考目标</h2>
+            <div class="form-group">
+                <label for="targetFullScore">该科目中考满分：</label>
+                <input type="number" id="targetFullScore" placeholder="例如：120" min="1">
+                <small style="color: #909399; display: block; margin-top: 4px;">南京中考满分参考：语文/数学/英语 120、物理 100、化学 80、道德与法治/历史 60、体育 40（总分700）；地理、生物为等级考查。</small>
+            </div>
+            <div class="form-group">
+                <label for="targetScore">目标分数：</label>
+                <input type="number" id="targetScore" placeholder="例如：102" min="0">
+                <small style="color: #909399; display: block; margin-top: 4px;">可参考目标高中近年录取线中该科目的要求；留空并保存即可清除目标。</small>
+            </div>
+            <div class="form-group">
+                <label for="targetRefRate">地区参考得分率（可选，%）：</label>
+                <input type="number" id="targetRefRate" placeholder="例如：65" min="0" max="100">
+                <small style="color: #909399; display: block; margin-top: 4px;">填写区/市质量监测公布的平均得分率，用于对比孩子与地区平均水平（如 65 表示区平均得分率65%）。</small>
+            </div>
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button class="btn btn-primary" id="saveTargetBtn">保存</button>
+                <button class="btn btn-secondary" id="cancelTargetBtn">取消</button>
+            </div>
+            <div class="error" id="targetError"></div>
+        </div>
+    </div>
+
     <script>
         // Gitee Gist配置（需要替换为你的配置）
         const gistConfig = {
@@ -873,11 +920,13 @@
                                 <div class="subject-stats">
                                     <span class="stat-badge"><strong>考试次数：</strong>${examCount}</span>
                                     <span class="stat-badge ${trendClass}"><strong>成绩趋势：</strong>${trendInfo}</span>
+                                    ${subject.zhongkao && subject.zhongkao.targetScore > 0 ? `<span class="stat-badge target-badge"><strong>🎯 目标：</strong>${subject.zhongkao.targetScore}/${subject.zhongkao.fullScore}分</span>` : ''}
                                 </div>
                             </div>
                             <div class="subject-actions" onclick="event.stopPropagation()">
                                 <button class="btn btn-success" onclick="openAddExamModal(${subject.id})">添加考试</button>
                                 <button class="btn btn-secondary" onclick="openTrendAnalysis(${subject.id})">趋势分析</button>
+                                <button class="btn btn-secondary" onclick="openTargetModal(${subject.id})">🎯 目标</button>
                                 <button class="btn btn-danger" onclick="deleteSubject(${subject.id})">删除科目</button>
                             </div>
                         </div>
@@ -921,9 +970,9 @@
                         </div>
                     </div>
                     <div class="stats-row">
-                        <div class="stat-item"><strong>个人分数：</strong>${exam.childScore}</div>
+                        <div class="stat-item"><strong>个人分数：</strong>${exam.childScore}/${exam.fullScore}（${scoreRate(exam.childScore, exam.fullScore).toFixed(1)}%）</div>
                         <div class="stat-item"><strong>班级平均：</strong>${exam.average.toFixed(2)}</div>
-                        <div class="stat-item"><strong>班级排名：</strong>${exam.rank}</div>
+                        <div class="stat-item"><strong>班级排名：</strong>${exam.rank || '—'}</div>
                     </div>
                 </div>
             `).join('');
@@ -956,6 +1005,11 @@
 
         closeTrendBtn.addEventListener('click', function() {
             trendModal.style.display = 'none';
+        });
+
+        document.getElementById('saveTargetBtn').addEventListener('click', saveTarget);
+        document.getElementById('cancelTargetBtn').addEventListener('click', function() {
+            document.getElementById('targetModal').style.display = 'none';
         });
 
         updateExamBtn.addEventListener('click', updateExam);
@@ -1125,14 +1179,75 @@
             }
         }
 
+        // 中考目标设置
+        let currentTargetSubjectId = null;
+
+        function openTargetModal(subjectId) {
+            currentTargetSubjectId = subjectId;
+            const subject = subjects.find(s => s.id === subjectId);
+            document.getElementById('targetModalTitle').textContent = `🎯 设置「${subject.name}」中考目标`;
+            const zk = subject.zhongkao || {};
+            document.getElementById('targetFullScore').value = zk.fullScore || '';
+            document.getElementById('targetScore').value = zk.targetScore || '';
+            document.getElementById('targetRefRate').value = zk.referenceRate || '';
+            document.getElementById('targetError').textContent = '';
+            document.getElementById('targetModal').style.display = 'block';
+        }
+
+        function saveTarget() {
+            const subject = subjects.find(s => s.id === currentTargetSubjectId);
+            const errorEl = document.getElementById('targetError');
+            errorEl.textContent = '';
+
+            const fullScoreInput = document.getElementById('targetFullScore').value.trim();
+            const targetScoreInput = document.getElementById('targetScore').value.trim();
+            const refRateInput = document.getElementById('targetRefRate').value.trim();
+            const fullScore = fullScoreInput === '' ? null : parseFloat(fullScoreInput);
+            const targetScore = targetScoreInput === '' ? null : parseFloat(targetScoreInput);
+            const refRate = refRateInput === '' ? null : parseFloat(refRateInput);
+
+            // 全部留空 = 清除目标
+            if (targetScore === null && refRate === null) {
+                delete subject.zhongkao;
+                saveSubjects();
+                renderSubjects();
+                document.getElementById('targetModal').style.display = 'none';
+                return;
+            }
+
+            if (targetScore !== null) {
+                if (fullScore === null || isNaN(fullScore) || fullScore <= 0) {
+                    errorEl.textContent = '请填写有效的中考满分';
+                    return;
+                }
+                if (isNaN(targetScore) || targetScore < 0 || targetScore > fullScore) {
+                    errorEl.textContent = '目标分数须在 0 到中考满分之间';
+                    return;
+                }
+            }
+            if (refRate !== null && (isNaN(refRate) || refRate < 0 || refRate > 100)) {
+                errorEl.textContent = '地区参考得分率须在 0~100 之间';
+                return;
+            }
+
+            subject.zhongkao = {};
+            if (fullScore !== null) subject.zhongkao.fullScore = fullScore;
+            if (targetScore !== null) subject.zhongkao.targetScore = targetScore;
+            if (refRate !== null) subject.zhongkao.referenceRate = refRate;
+
+            saveSubjects();
+            renderSubjects();
+            document.getElementById('targetModal').style.display = 'none';
+        }
+
         // 分析考试
         function analyzeExam(subjectId, examId) {
             const subject = subjects.find(s => s.id === subjectId);
             const exam = subject.exams.find(e => e.id === examId);
-            
+            const zk = subject.zhongkao || null;
+
             const scoresArr = exam.scores;
             const sortedScores = [...scoresArr].sort((a, b) => b - a);
-            const total = scoresArr.reduce((sum, score) => sum + score, 0);
             const avg = exam.average;
             const max = Math.max(...scoresArr);
             const min = Math.min(...scoresArr);
@@ -1140,97 +1255,153 @@
             const mode = calculateMode(scoresArr);
             const stdDev = calculateStandardDeviation(scoresArr, avg);
             const range = max - min;
+            const cv = avg > 0 ? (stdDev / avg * 100).toFixed(1) + '%' : '—';
             const fullScore = exam.fullScore;
             const childScore = exam.childScore;
             const childRank = exam.rank;
-            
-            const passCount = scoresArr.filter(score => score >= fullScore * 0.6).length;
-            const goodCount = scoresArr.filter(score => score >= fullScore * 0.7).length;
-            const excellentCount = scoresArr.filter(score => score >= fullScore * 0.8).length;
-            const highCount = scoresArr.filter(score => score >= fullScore * 0.9).length;
-            
-            const passRateVal = (passCount / scoresArr.length * 100).toFixed(1) + '%';
-            const goodRateVal = (goodCount / scoresArr.length * 100).toFixed(1) + '%';
-            const excellentRateVal = (excellentCount / scoresArr.length * 100).toFixed(1) + '%';
-            const highRateVal = (highCount / scoresArr.length * 100).toFixed(1) + '%';
-            
-            const difficultyVal = (avg / fullScore).toFixed(4);
-            const groupSize = Math.ceil(scoresArr.length * 0.27);
-            const realGroupSize = Math.max(groupSize, 1);
-            const highGroup = sortedScores.slice(0, realGroupSize);
-            const lowGroup = sortedScores.slice(-realGroupSize);
-            const highGroupAvg = calculateAverage(highGroup);
-            const lowGroupAvg = calculateAverage(lowGroup);
-            const discriminationVal = ((highGroupAvg - lowGroupAvg) / fullScore).toFixed(4);
-            const validityVal = (1 - stdDev / avg * 0.5).toFixed(4);
-            
+            const n = scoresArr.length;
+
+            // 等级分布（江苏省义务教育阶段等级评价惯例，按得分率：优秀≥85%、良好≥70%、合格≥60%、待合格<60%；低分线40%）
+            const excellentCount = scoresArr.filter(s => s >= fullScore * 0.85).length;
+            const goodCount = scoresArr.filter(s => s >= fullScore * 0.70 && s < fullScore * 0.85).length;
+            const passCount = scoresArr.filter(s => s >= fullScore * 0.60 && s < fullScore * 0.70).length;
+            const failCount = scoresArr.filter(s => s < fullScore * 0.60).length;
+            const lowCount = scoresArr.filter(s => s < fullScore * 0.40).length;
+            const pct = c => (c / n * 100).toFixed(1) + '%';
+
+            const difficultyVal = (avg / fullScore).toFixed(3);
+            const groupSize = Math.max(Math.ceil(n * 0.27), 1);
+            const highGroupAvg = calculateAverage(sortedScores.slice(0, groupSize));
+            const lowGroupAvg = calculateAverage(sortedScores.slice(-groupSize));
+            const discriminationVal = ((highGroupAvg - lowGroupAvg) / fullScore).toFixed(3);
+
             const distribution = calculateDistribution(scoresArr, fullScore);
-            const childPercentileVal = ((sortedScores.length - childRank) / sortedScores.length * 100).toFixed(1) + '%';
-            const childGapVal = (childScore - avg).toFixed(2);
-            
-            const qualityText = generateQualityDescription(difficultyVal, discriminationVal, validityVal);
-            const childAnalysisText = generateChildAnalysis(childScore, avg, childRank, scoresArr.length);
-            
+
+            // 个人核心指标
+            const childRate = scoreRate(childScore, fullScore);
+            const childGrade = gradeLevelOfRate(childRate);
+            const pr = calcPercentileRank(scoresArr, childScore);
+            const z = stdDev > 0 ? (childScore - avg) / stdDev : null;
+            const gapAvg = (childScore - avg).toFixed(2);
+
+            // 纵向：最近一次更早的考试（按日期），用于个人纵向对比
+            const prevExam = subject.exams
+                .filter(e => e.id !== exam.id && new Date(e.date) < new Date(exam.date))
+                .sort((a, b) => new Date(b.date) - new Date(a.date))[0] || null;
+            const prevRate = prevExam ? scoreRate(prevExam.childScore, prevExam.fullScore) : null;
+
+            // 目标与地区参考
+            const targetRate = zk && zk.targetScore > 0 && zk.fullScore > 0 ? scoreRate(zk.targetScore, zk.fullScore) : null;
+            const refRate = zk && zk.referenceRate > 0 ? zk.referenceRate : null;
+
+            const qualityText = generateQualityDescription(difficultyVal, discriminationVal);
+            const personalText = generatePersonalAnalysis({
+                childRate, childGrade, pr, z, prevRate,
+                prevName: prevExam ? prevExam.name : null, targetRate
+            });
+
+            let targetSection = '';
+            if (targetRate !== null) {
+                const diffRate = childRate - targetRate;
+                const diffZhongkao = diffRate / 100 * zk.fullScore;
+                targetSection = `
+                <div class="result-section">
+                    <h3>🎯 中考目标对比</h3>
+                    <div class="stats-row">
+                        <div class="stat-item"><strong>目标：</strong>${zk.targetScore}分 / ${zk.fullScore}分（${targetRate.toFixed(1)}%）</div>
+                        <div class="stat-item"><strong>本次得分率：</strong>${childRate.toFixed(1)}%</div>
+                        <div class="stat-item"><strong>差距：</strong><span style="color:${diffRate >= 0 ? '#67c23a' : '#f56c6c'};font-weight:bold;">${diffRate >= 0 ? '+' : ''}${diffRate.toFixed(1)}个百分点</span></div>
+                    </div>
+                    <p style="color:#909399;font-size:13px;margin-top:8px;">${diffRate >= 0
+                        ? `本次已达到目标线，按中考满分${zk.fullScore}分折算约超出目标 ${diffZhongkao.toFixed(1)} 分。`
+                        : `按中考满分${zk.fullScore}分折算，距离目标还差约 ${Math.abs(diffZhongkao).toFixed(1)} 分（得分率需再提高 ${Math.abs(diffRate).toFixed(1)} 个百分点）。`}</p>
+                </div>`;
+            }
+
+            let refSection = '';
+            if (refRate !== null) {
+                const d = childRate - refRate;
+                refSection = `
+                <div class="result-section">
+                    <h3>📍 地区水平对比</h3>
+                    <div class="stats-row">
+                        <div class="stat-item"><strong>本次得分率：</strong>${childRate.toFixed(1)}%</div>
+                        <div class="stat-item"><strong>参考得分率：</strong>${refRate}%</div>
+                        <div class="stat-item"><strong>对比：</strong><span style="color:${d >= 0 ? '#67c23a' : '#f56c6c'};font-weight:bold;">${d >= 0 ? '高于参考 ' : '低于参考 '}${Math.abs(d).toFixed(1)} 个百分点</span></div>
+                    </div>
+                </div>`;
+            }
+
             analysisResult.innerHTML = `
                 <div class="result-section">
                     <h3>班级成绩总体情况</h3>
                     <div class="result-grid">
-                        <div class="result-item"><strong>班级人数：</strong>${scoresArr.length}</div>
+                        <div class="result-item"><strong>班级人数：</strong>${n}</div>
                         <div class="result-item"><strong>班级平均分：</strong>${avg.toFixed(2)}</div>
                         <div class="result-item"><strong>班级最高分：</strong>${max}</div>
                         <div class="result-item"><strong>班级最低分：</strong>${min}</div>
                         <div class="result-item"><strong>中位数：</strong>${median}</div>
                         <div class="result-item"><strong>众数：</strong>${Array.isArray(mode) ? mode.join(', ') : mode}</div>
                         <div class="result-item"><strong>标准差：</strong>${stdDev.toFixed(2)}</div>
+                        <div class="result-item"><strong>变异系数：</strong>${cv}</div>
                         <div class="result-item"><strong>极差：</strong>${range}</div>
                     </div>
                 </div>
-                
+
                 <div class="result-section">
-                    <h3>通过率统计</h3>
+                    <h3>等级分布（江苏口径）</h3>
                     <div class="stats-row">
-                        <div class="stat-item"><strong>及格率（60%）：</strong>${passRateVal}</div>
-                        <div class="stat-item"><strong>良好率（70%）：</strong>${goodRateVal}</div>
-                        <div class="stat-item"><strong>优秀率（80%）：</strong>${excellentRateVal}</div>
-                        <div class="stat-item"><strong>高分率（90%）：</strong>${highRateVal}</div>
+                        <div class="stat-item"><strong>优秀（≥85%）：</strong>${excellentCount}人 (${pct(excellentCount)})</div>
+                        <div class="stat-item"><strong>良好（70%~85%）：</strong>${goodCount}人 (${pct(goodCount)})</div>
+                        <div class="stat-item"><strong>合格（60%~70%）：</strong>${passCount}人 (${pct(passCount)})</div>
                     </div>
+                    <div class="stats-row" style="margin-top:10px;">
+                        <div class="stat-item"><strong>待合格（<60%）：</strong>${failCount}人 (${pct(failCount)})</div>
+                        <div class="stat-item"><strong>低分（<40%）：</strong>${lowCount}人 (${pct(lowCount)})</div>
+                    </div>
+                    <p style="color:#909399;font-size:12px;margin-top:8px;">* 等级线参照江苏省义务教育阶段等级评价惯例（优秀≥85%、良好≥70%、合格≥60%），与中考衔接；低分率为教育质量监测常用指标。</p>
                 </div>
-                
+
                 <div class="result-section">
                     <h3>试卷质量分析</h3>
                     <div class="result-grid">
-                        <div class="result-item"><strong>难度系数：</strong>${difficultyVal}</div>
-                        <div class="result-item"><strong>区分度：</strong>${discriminationVal}</div>
-                        <div class="result-item"><strong>效度：</strong>${validityVal}</div>
+                        <div class="result-item"><strong>难度系数P：</strong>${difficultyVal}</div>
+                        <div class="result-item"><strong>区分度D：</strong>${discriminationVal}</div>
                     </div>
                     ${qualityText}
                 </div>
-                
+
                 <div class="result-section">
                     <h3>分数分布</h3>
                     <div class="distribution-chart">
                         ${renderDistributionChart(distribution)}
                     </div>
                 </div>
-                
+
+                ${targetSection}
+                ${refSection}
+
                 <div class="result-section">
                     <h3>个人成绩分析</h3>
                     <div class="child-analysis">
                         <h4>个人成绩详情</h4>
                         <div class="stats-row">
-                            <div class="stat-item"><strong>个人分数：</strong>${childScore}</div>
-                            <div class="stat-item"><strong>班级排名：</strong>${childRank}</div>
-                            <div class="stat-item"><strong>超过班级：</strong>${childPercentileVal}</div>
-                            <div class="stat-item"><strong>与平均分差距：</strong>${childGapVal > 0 ? '+' + childGapVal : childGapVal}</div>
+                            <div class="stat-item"><strong>个人分数：</strong>${childScore} / ${fullScore}</div>
+                            <div class="stat-item"><strong>得分率：</strong><span class="${childGrade.cls}">${childRate.toFixed(1)}%（${childGrade.label}）</span></div>
+                            <div class="stat-item"><strong>班级排名：</strong>${childRank || '—'}</div>
+                            <div class="stat-item"><strong>百分等级PR：</strong>${pr !== null ? pr.toFixed(1) + '%' : '—'}</div>
+                            <div class="stat-item"><strong>标准分Z：</strong>${z !== null ? (z > 0 ? '+' + z.toFixed(2) : z.toFixed(2)) : '—'}</div>
+                            <div class="stat-item"><strong>与均分差：</strong>${gapAvg > 0 ? '+' + gapAvg : gapAvg}</div>
                         </div>
-                        ${childAnalysisText}
+                        ${personalText}
+                        ${targetRate === null ? `<p style="color:#909399;font-size:12px;">💡 提示：在科目卡片点「🎯 目标」设置中考满分与目标分后，这里将显示目标达成对比。</p>` : ''}
                     </div>
                 </div>
             `;
-            
+
             analysisResult.style.display = 'block';
             analysisModal.style.display = 'block';
-            
+
             setTimeout(() => {
                 scrollToBottom(analysisResult);
             }, 100);
@@ -1254,40 +1425,50 @@
 
         // 渲染趋势图表
         function renderTrendChart(subject) {
+            const zk = subject.zhongkao || null;
             const sortedExams = [...subject.exams].sort((a, b) => new Date(a.date) - new Date(b.date));
             const labels = sortedExams.map(e => `${e.name}\n${e.date}`);
-            const childScores = sortedExams.map(e => e.childScore);
-            const averages = sortedExams.map(e => e.average);
+
+            // 全部换算为得分率（分数÷满分×100），消除不同考试满分与难度差异，才能跨考试比较
+            const childRates = sortedExams.map(e => scoreRate(e.childScore, e.fullScore));
+            const classRates = sortedExams.map(e => scoreRate(e.average, e.fullScore));
             const ranks = sortedExams.map(e => e.rank);
-            
-            const childScoreTrend = calculateTrend(childScores);
-            const averageTrend = calculateTrend(averages);
+            const zSeries = sortedExams.map(e => {
+                const sd = calculateStandardDeviation(e.scores, e.average);
+                return sd > 0 ? (e.childScore - e.average) / sd : 0;
+            });
+
+            const childTrend = calculateTrend(childRates);
+            const classTrend = calculateTrend(classRates);
             const rankTrend = calculateTrend(ranks);
-            
-            const predictedScore = predictNextScore(childScores);
-            const predictedRank = predictNextRank(ranks);
-            
+            const zTrend = calculateTrend(zSeries);
+
+            const predictedRate = predictNextScore(childRates);
+            const targetRate = zk && zk.targetScore > 0 && zk.fullScore > 0 ? scoreRate(zk.targetScore, zk.fullScore) : null;
+            const predictedZhongkao = (zk && zk.fullScore > 0 && predictedRate !== null)
+                ? Math.max(0, Math.min(zk.fullScore, predictedRate / 100 * zk.fullScore)) : null;
+
             const trendResult = document.getElementById('trendResult');
             trendResult.innerHTML = `
                 <div style="margin-bottom: 20px;">
                     <canvas id="trendChart" style="max-height: 400px;"></canvas>
                 </div>
-                
+
                 <div class="result-section">
-                    <h3>趋势分析</h3>
+                    <h3>趋势分析（基于得分率）</h3>
                     <div class="stats-row">
                         <div class="stat-item">
-                            <strong>个人成绩趋势：</strong>
-                            <span style="color: ${childScoreTrend > 0 ? '#67c23a' : '#f56c6c'};">
-                                ${childScoreTrend > 0 ? '↑ 上升' : childScoreTrend < 0 ? '↓ 下降' : '→ 稳定'}
-                                (${childScoreTrend > 0 ? '+' : ''}${childScoreTrend.toFixed(2)}/次)
+                            <strong>个人得分率趋势：</strong>
+                            <span style="color: ${childTrend > 0 ? '#67c23a' : '#f56c6c'};">
+                                ${childTrend > 0 ? '↑ 上升' : childTrend < 0 ? '↓ 下降' : '→ 稳定'}
+                                (${childTrend > 0 ? '+' : ''}${childTrend.toFixed(2)}%/次)
                             </span>
                         </div>
                         <div class="stat-item">
-                            <strong>班级平均趋势：</strong>
-                            <span style="color: ${averageTrend > 0 ? '#67c23a' : '#f56c6c'};">
-                                ${averageTrend > 0 ? '↑ 上升' : averageTrend < 0 ? '↓ 下降' : '→ 稳定'}
-                                (${averageTrend > 0 ? '+' : ''}${averageTrend.toFixed(2)}/次)
+                            <strong>班级平均得分率：</strong>
+                            <span style="color: ${classTrend > 0 ? '#67c23a' : '#f56c6c'};">
+                                ${classTrend > 0 ? '↑ 上升' : classTrend < 0 ? '↓ 下降' : '→ 稳定'}
+                                (${classTrend > 0 ? '+' : ''}${classTrend.toFixed(2)}%/次)
                             </span>
                         </div>
                         <div class="stat-item">
@@ -1297,30 +1478,47 @@
                                 (${rankTrend < 0 ? '' : '+'}${rankTrend.toFixed(2)}/次)
                             </span>
                         </div>
+                        <div class="stat-item">
+                            <strong>相对班级位置（Z分）：</strong>
+                            <span style="color: ${zTrend > 0 ? '#67c23a' : '#f56c6c'};">
+                                ${zTrend > 0 ? '↑ 相对进步' : zTrend < 0 ? '↓ 相对退步' : '→ 持平'}
+                                (${zTrend > 0 ? '+' : ''}${zTrend.toFixed(2)}/次)
+                            </span>
+                        </div>
                     </div>
+                    <p style="color:#909399;font-size:12px;margin-top:8px;">* 趋势统一按得分率计算（分数÷满分），消除不同考试满分和难度差异；「相对班级位置」用标准分变化衡量，反映试卷难易变化下孩子在班级中的真实进退。</p>
                 </div>
-                
+
                 <div class="result-section">
-                    <h3>下次考试预测</h3>
+                    <h3>预测与中考目标</h3>
                     <div class="stats-row">
                         <div class="stat-item">
-                            <strong>预测分数：</strong>
+                            <strong>预测下次得分率：</strong>
                             <span style="color: #409eff; font-size: 18px; font-weight: bold;">
-                                ${predictedScore !== null ? predictedScore.toFixed(2) : '无法预测'}
+                                ${predictedRate !== null ? predictedRate.toFixed(1) + '%' : '无法预测'}
                             </span>
                         </div>
+                        ${predictedZhongkao !== null ? `
                         <div class="stat-item">
-                            <strong>预测排名：</strong>
-                            <span style="color: #409eff; font-size: 18px; font-weight: bold;">
-                                ${predictedRank !== null ? Math.round(predictedRank) : '无法预测'}
+                            <strong>中考预估分：</strong>
+                            <span style="color: #409eff; font-size: 18px; font-weight: bold;">${predictedZhongkao.toFixed(1)}</span>
+                            <span style="color:#909399;">/ ${zk.fullScore}分</span>
+                        </div>` : ''}
+                        ${targetRate !== null && predictedZhongkao !== null ? `
+                        <div class="stat-item">
+                            <strong>与目标差距：</strong>
+                            <span style="color: ${predictedZhongkao >= zk.targetScore ? '#67c23a' : '#f56c6c'}; font-size: 18px; font-weight: bold;">
+                                ${predictedZhongkao >= zk.targetScore ? '+' : ''}${(predictedZhongkao - zk.targetScore).toFixed(1)}分
                             </span>
-                        </div>
+                            <span style="color:#909399;">（目标 ${zk.targetScore}分）</span>
+                        </div>` : ''}
                     </div>
+                    ${targetRate === null ? `<p style="color:#909399;font-size:12px;margin-top:8px;">💡 尚未设置中考目标：在科目卡片点「🎯 目标」设置中考满分与目标分数后，将显示中考预估分和目标差距。</p>` : ''}
                     <p style="color: #909399; font-size: 12px; margin-top: 10px;">
-                        * 预测基于历史数据的线性回归分析，仅供参考
+                        * 预测基于历史得分率的线性回归分析；中考预估 = 预测得分率 × 中考满分，仅供参考，实际成绩还受复习阶段、试卷结构等影响。
                     </p>
                 </div>
-                
+
                 <div style="margin-top: 20px;">
                     <h3>考试记录详情</h3>
                     <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
@@ -1329,60 +1527,78 @@
                                 <th style="padding: 10px; text-align: left; border: 1px solid #e0e0e0;">考试名称</th>
                                 <th style="padding: 10px; text-align: left; border: 1px solid #e0e0e0;">日期</th>
                                 <th style="padding: 10px; text-align: left; border: 1px solid #e0e0e0;">个人分数</th>
+                                <th style="padding: 10px; text-align: left; border: 1px solid #e0e0e0;">得分率</th>
                                 <th style="padding: 10px; text-align: left; border: 1px solid #e0e0e0;">班级平均</th>
                                 <th style="padding: 10px; text-align: left; border: 1px solid #e0e0e0;">排名</th>
+                                <th style="padding: 10px; text-align: left; border: 1px solid #e0e0e0;">PR</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${[...sortedExams].reverse().map(exam => `
+                            ${[...sortedExams].reverse().map(exam => {
+                                const rate = scoreRate(exam.childScore, exam.fullScore);
+                                const pr = calcPercentileRank(exam.scores, exam.childScore);
+                                return `
                                 <tr>
                                     <td style="padding: 10px; border: 1px solid #e0e0e0;">${exam.name}</td>
                                     <td style="padding: 10px; border: 1px solid #e0e0e0;">${exam.date}</td>
-                                    <td style="padding: 10px; border: 1px solid #e0e0e0; font-weight: bold;">${exam.childScore}</td>
-                                    <td style="padding: 10px; border: 1px solid #e0e0e0;">${exam.average.toFixed(2)}</td>
-                                    <td style="padding: 10px; border: 1px solid #e0e0e0;">${exam.rank}</td>
-                                </tr>
-                            `).join('')}
+                                    <td style="padding: 10px; border: 1px solid #e0e0e0; font-weight: bold;">${exam.childScore}/${exam.fullScore}</td>
+                                    <td style="padding: 10px; border: 1px solid #e0e0e0; font-weight: bold;">${rate.toFixed(1)}%</td>
+                                    <td style="padding: 10px; border: 1px solid #e0e0e0;">${scoreRate(exam.average, exam.fullScore).toFixed(1)}%</td>
+                                    <td style="padding: 10px; border: 1px solid #e0e0e0;">${exam.rank || '—'}</td>
+                                    <td style="padding: 10px; border: 1px solid #e0e0e0;">${pr !== null ? pr.toFixed(0) + '%' : '—'}</td>
+                                </tr>`;
+                            }).join('')}
                         </tbody>
                     </table>
                 </div>
             `;
-            
+
+            const datasets = [
+                {
+                    label: '个人得分率(%)',
+                    data: childRates,
+                    borderColor: '#409eff',
+                    backgroundColor: 'rgba(64, 158, 255, 0.1)',
+                    yAxisID: 'y',
+                    tension: 0.3,
+                    fill: true
+                },
+                {
+                    label: '班级平均得分率(%)',
+                    data: classRates,
+                    borderColor: '#67c23a',
+                    backgroundColor: 'rgba(103, 194, 58, 0.1)',
+                    yAxisID: 'y',
+                    tension: 0.3,
+                    fill: false
+                },
+                {
+                    label: '排名',
+                    data: ranks,
+                    borderColor: '#e6a23c',
+                    backgroundColor: 'rgba(230, 162, 60, 0.1)',
+                    yAxisID: 'y1',
+                    tension: 0.3,
+                    fill: false
+                }
+            ];
+            if (targetRate !== null) {
+                datasets.push({
+                    label: '中考目标线(%)',
+                    data: labels.map(() => targetRate),
+                    borderColor: '#f56c6c',
+                    borderDash: [6, 6],
+                    borderWidth: 2,
+                    pointRadius: 0,
+                    yAxisID: 'y',
+                    fill: false
+                });
+            }
+
             const ctx = document.getElementById('trendChart').getContext('2d');
             new Chart(ctx, {
                 type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [
-                        {
-                            label: '个人分数',
-                            data: childScores,
-                            borderColor: '#409eff',
-                            backgroundColor: 'rgba(64, 158, 255, 0.1)',
-                            yAxisID: 'y',
-                            tension: 0.3,
-                            fill: true
-                        },
-                        {
-                            label: '班级平均',
-                            data: averages,
-                            borderColor: '#67c23a',
-                            backgroundColor: 'rgba(103, 194, 58, 0.1)',
-                            yAxisID: 'y',
-                            tension: 0.3,
-                            fill: true
-                        },
-                        {
-                            label: '排名',
-                            data: ranks,
-                            borderColor: '#e6a23c',
-                            backgroundColor: 'rgba(230, 162, 60, 0.1)',
-                            yAxisID: 'y1',
-                            tension: 0.3,
-                            fill: true
-                        }
-                    ]
-                },
+                data: { labels: labels, datasets: datasets },
                 options: {
                     responsive: true,
                     interaction: {
@@ -1394,9 +1610,11 @@
                             type: 'linear',
                             display: true,
                             position: 'left',
+                            min: 0,
+                            max: 100,
                             title: {
                                 display: true,
-                                text: '分数'
+                                text: '得分率(%)'
                             }
                         },
                         y1: {
@@ -1431,7 +1649,9 @@
                                         label += ': ';
                                     }
                                     if (context.parsed.y !== null) {
-                                        label += context.parsed.y;
+                                        label += context.dataset.yAxisID === 'y'
+                                            ? context.parsed.y.toFixed(1) + (context.datasetIndex === 2 ? '' : '%')
+                                            : context.parsed.y;
                                     }
                                     return label;
                                 }
@@ -1547,14 +1767,15 @@
         }
 
         function calculateDistribution(scores, fullScore) {
+            // 等级口径与江苏省义务教育阶段等级评价惯例一致：优秀≥85%、良好70%-85%、合格60%-70%、待合格<60%，低分线40%
             const ranges = [
-                { min: 0, max: fullScore * 0.6, label: '不及格 (<60%)' },
-                { min: fullScore * 0.6, max: fullScore * 0.7, label: '及格 (60%-69%)' },
-                { min: fullScore * 0.7, max: fullScore * 0.8, label: '良好 (70%-79%)' },
-                { min: fullScore * 0.8, max: fullScore * 0.9, label: '优秀 (80%-89%)' },
-                { min: fullScore * 0.9, max: fullScore + 1, label: '卓越 (90%-100%)' }
+                { min: 0, max: fullScore * 0.4, label: '低分 (<40%)' },
+                { min: fullScore * 0.4, max: fullScore * 0.6, label: '待合格 (40%-59%)' },
+                { min: fullScore * 0.6, max: fullScore * 0.7, label: '合格 (60%-69%)' },
+                { min: fullScore * 0.7, max: fullScore * 0.85, label: '良好 (70%-84%)' },
+                { min: fullScore * 0.85, max: fullScore + 1, label: '优秀 (≥85%)' }
             ];
-            
+
             return ranges.map(range => {
                 const count = scores.filter(score => score >= range.min && score < range.max).length;
                 return {
@@ -1563,6 +1784,29 @@
                     percentage: (count / scores.length * 100).toFixed(1)
                 };
             });
+        }
+
+        // 得分率（%）：分数 ÷ 本次满分 × 100，用于跨考试统一比较
+        function scoreRate(score, fullScore) {
+            if (!fullScore || fullScore <= 0) return 0;
+            return score / fullScore * 100;
+        }
+
+        // 百分等级 PR（%）：超过班级中百分之多少的同学（同分各计一半，教育统计标准算法）
+        function calcPercentileRank(scores, childScore) {
+            const n = scores.length;
+            if (!n) return null;
+            const below = scores.filter(s => s < childScore).length;
+            const same = scores.filter(s => s === childScore).length;
+            return (below + same / 2) / n * 100;
+        }
+
+        // 按江苏等级线（基于得分率）判定个人等级
+        function gradeLevelOfRate(rate) {
+            if (rate >= 85) return { label: '优秀', cls: 'grade-excellent' };
+            if (rate >= 70) return { label: '良好', cls: 'grade-good' };
+            if (rate >= 60) return { label: '合格', cls: 'grade-pass' };
+            return { label: '待合格', cls: 'grade-fail' };
         }
 
         function renderDistributionChart(distribution) {
@@ -1579,21 +1823,21 @@
             }).join('');
         }
 
-        function generateQualityDescription(difficulty, discrimination, validity) {
+        function generateQualityDescription(difficulty, discrimination) {
             let desc = '<p><strong>试卷质量评价：</strong></p>';
-            
+
             difficulty = Number(difficulty);
             let diffDesc = '';
-            if (difficulty < 0.3) {
-                diffDesc = '难度过高，学生普遍得分较低';
-            } else if (difficulty < 0.5) {
-                diffDesc = '难度较高，适合选拔性考试';
-            } else if (difficulty < 0.7) {
-                diffDesc = '难度适中，适合教学诊断';
+            if (difficulty >= 0.75) {
+                diffDesc = '偏容易，多数学生得分较高';
+            } else if (difficulty >= 0.60) {
+                diffDesc = '难度适中，接近中考要求（江苏中考整体难度系数一般在0.70~0.75）';
+            } else if (difficulty >= 0.40) {
+                diffDesc = '偏难，区分选拔性较强';
             } else {
-                diffDesc = '难度较低，学生普遍得分较高';
+                diffDesc = '很难，学生普遍得分较低';
             }
-            
+
             discrimination = Number(discrimination);
             let discDesc = '';
             if (discrimination >= 0.4) {
@@ -1605,46 +1849,52 @@
             } else {
                 discDesc = '区分度较差，区分能力弱';
             }
-            
-            validity = Number(validity);
-            let validDesc = '';
-            if (validity >= 0.8) {
-                validDesc = '效度优秀，考试结果能有效反映学生真实水平';
-            } else if (validity >= 0.6) {
-                validDesc = '效度良好，考试结果可靠性较高';
-            } else {
-                validDesc = '效度一般，考试结果需要结合其他因素分析';
-            }
-            
-            desc += `<p><strong>难度：</strong>${diffDesc}</p>`;
-            desc += `<p><strong>区分度：</strong>${discDesc}</p>`;
-            desc += `<p><strong>效度：</strong>${validDesc}</p>`;
-            
+
+            desc += `<p><strong>难度（P=平均分÷满分，越大越容易）：</strong>${diffDesc}</p>`;
+            desc += `<p><strong>区分度（前后27%高低分组法，教育测量标准算法）：</strong>${discDesc}</p>`;
+
             return desc;
         }
 
-        function generateChildAnalysis(childScore, avg, rank, total) {
-            let desc = '<p><strong>成绩分析：</strong></p>';
-            
-            if (childScore > avg + 10) {
-                desc += '<p>成绩优秀，明显高于班级平均水平，继续保持！</p>';
-            } else if (childScore > avg) {
-                desc += '<p>成绩良好，高于班级平均水平，有提升空间！</p>';
-            } else if (childScore > avg - 10) {
-                desc += '<p>成绩中等，接近班级平均水平，需要加强学习！</p>';
-            } else {
-                desc += '<p>成绩有待提高，低于班级平均水平，建议分析原因，针对性辅导！</p>';
+        function generatePersonalAnalysis(ctx) {
+            let desc = '<p><strong>综合评价：</strong></p>';
+
+            const rateText = ctx.childRate.toFixed(1);
+            desc += `<p>本次得分率 ${rateText}%，按江苏等级线（优秀≥85%、良好≥70%、合格≥60%）评定为「${ctx.childGrade.label}」。`;
+
+            if (ctx.pr !== null) {
+                let posDesc;
+                if (ctx.pr >= 85) posDesc = '位于班级前列';
+                else if (ctx.pr >= 60) posDesc = '处于班级中上水平';
+                else if (ctx.pr >= 40) posDesc = '处于班级中游';
+                else posDesc = '处于班级中下游，提升空间较大';
+                desc += `百分等级 PR=${ctx.pr.toFixed(1)}%，即超过全班约 ${ctx.pr.toFixed(0)}% 的同学，${posDesc}。`;
             }
-            
-            const topPercent = (rank / total * 100).toFixed(1);
-            if (topPercent <= 20) {
-                desc += `<p>排名在班级前${topPercent}%，属于优秀行列！</p>`;
-            } else if (topPercent <= 50) {
-                desc += `<p>排名在班级前${topPercent}%，表现良好！</p>`;
-            } else {
-                desc += `<p>排名在班级后${(100 - topPercent).toFixed(1)}%，需要更加努力！</p>`;
+            desc += '</p>';
+
+            if (ctx.z !== null && !isNaN(ctx.z)) {
+                const zText = ctx.z > 0 ? '+' + ctx.z.toFixed(2) : ctx.z.toFixed(2);
+                let zDesc;
+                if (ctx.z >= 1) zDesc = '明显高于班级平均，且优势稳定（超均分1个标准差以上）';
+                else if (ctx.z > 0) zDesc = '高于班级平均水平';
+                else if (ctx.z > -1) zDesc = '略低于班级平均水平，差距不大';
+                else zDesc = '明显低于班级平均（低均分1个标准差以上），需要重点关注';
+                desc += `<p><strong>标准分（Z分）：</strong>${zText}，${zDesc}。Z分消除了试卷难易影响，反映孩子在班级中的真实相对位置。</p>`;
             }
-            
+
+            if (ctx.prevRate !== null) {
+                const d = ctx.childRate - ctx.prevRate;
+                const dir = d > 0.5 ? '提高' : (d < -0.5 ? '下降' : '基本持平');
+                desc += `<p><strong>纵向对比：</strong>与上一次考试「${ctx.prevName}」（得分率 ${ctx.prevRate.toFixed(1)}%）相比，得分率${dir} ${Math.abs(d).toFixed(1)} 个百分点（不同考试满分和难度不同，统一按得分率比较才准确）。</p>`;
+            }
+
+            if (ctx.targetRate !== null) {
+                const d = ctx.childRate - ctx.targetRate;
+                desc += `<p><strong>目标达成：</strong>${d >= 0
+                    ? `本次已达到中考目标线（目标得分率 ${ctx.targetRate.toFixed(1)}%）。`
+                    : `距中考目标线（目标得分率 ${ctx.targetRate.toFixed(1)}%）还差 ${Math.abs(d).toFixed(1)} 个百分点。`}</p>`;
+            }
+
             return desc;
         }
 
